@@ -1,5 +1,6 @@
 package com.volio.vn.b1_project.base
 
+import android.os.Bundle
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -10,7 +11,6 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDirections
 import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
-import timber.log.Timber
 
 abstract class BaseNavigation {
 
@@ -45,9 +45,29 @@ abstract class BaseNavigation {
      * @param currentNavId -> truyền vào id màn hình hiện tại để kiểm tra xem có đúng đang đứng ở màn hình hiện tại k
      * @param directions -> đích cần đến (đã bao gồm param rồi nhé)
      */
-    fun navigateTo(currentNavId: Int, directions: NavDirections, navOptions: NavOptions? = null, navOnResumed: Boolean = true) {
-        fun executeNavigate() {
+    fun navigateTo(
+        currentNavId: Int,
+        directions: NavDirections,
+        navOptions: NavOptions? = null,
+        navOnResumed: Boolean = true
+    ) {
+        fun executeNavigate(onDone: () -> Unit = {}) {
             if (navController != null && currentNavDestination?.id == currentNavId) {
+                navController?.addOnDestinationChangedListener(object :
+                    NavController.OnDestinationChangedListener {
+                    override fun onDestinationChanged(
+                        controller: NavController,
+                        destination: NavDestination,
+                        arguments: Bundle?
+                    ) {
+                        if (destination.id != currentNavId) {
+                            navController?.removeOnDestinationChangedListener(this)
+                            onDone()
+                        }
+
+                    }
+
+                })
                 navController?.navigate(directions, navOptions)
                 return
             }
@@ -56,16 +76,12 @@ abstract class BaseNavigation {
         if (!navOnResumed) {
             executeNavigate()
         } else {
-            try {
-                navController?.navigate(directions, navOptions)
-            } catch (e: Exception) {
-                val lifeCycleState = fragment().lifecycle.currentState
-                if (lifeCycleState == Lifecycle.State.RESUMED) {
-                    executeNavigate()
-                } else {
-                    if (defaultLifecycleObserver != null) {
-                        fragment().lifecycle.removeObserver(defaultLifecycleObserver!!)
-                    }
+            val lifeCycleState = fragment().lifecycle.currentState
+            if (lifeCycleState != Lifecycle.State.RESUMED) {
+                if (defaultLifecycleObserver != null) {
+                    fragment().lifecycle.removeObserver(defaultLifecycleObserver!!)
+                }
+                if (currentNavDestination?.id == currentNavId) {
                     defaultLifecycleObserver = object : DefaultLifecycleObserver {
                         override fun onResume(owner: LifecycleOwner) {
                             super.onResume(owner)
@@ -73,9 +89,15 @@ abstract class BaseNavigation {
                             executeNavigate()
                         }
                     }
-
                     fragment().lifecycle.addObserver(defaultLifecycleObserver as DefaultLifecycleObserver)
+                    executeNavigate(onDone = {
+                        if (defaultLifecycleObserver != null) {
+                            fragment().lifecycle.removeObserver(defaultLifecycleObserver as DefaultLifecycleObserver)
+                        }
+                    })
                 }
+            }else{
+                executeNavigate()
             }
         }
     }
@@ -84,80 +106,9 @@ abstract class BaseNavigation {
         navController?.popBackStack()
     }
 
-    fun popBackStack(currentNavId: Int, navOnResumed: Boolean = true) {
-
-        fun pop() {
-            if (navController?.currentDestination?.id == currentNavId) {
-                val result = navController?.navigateUp()
-                Timber.tag("BaseNavigation").e("popBackStack with id = $currentNavId result = $result")
-                return
-            } else {
-                Timber.tag("BaseNavigation").e("popBackStack with id = $currentNavId FAILURE")
-            }
-        }
-
-        val lifeCycleState = fragment().lifecycle.currentState
-
-        if (navOnResumed) {
-            if (lifeCycleState == Lifecycle.State.RESUMED) {
-                pop()
-            } else {
-                fragment().viewLifecycleOwner.lifecycle.addObserver(object : LifecycleEventObserver {
-                    override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
-                        if (event == Lifecycle.Event.ON_RESUME) {
-                            fragment().viewLifecycleOwner.lifecycle.removeObserver(this)
-                            pop()
-                        }
-                    }
-                })
-            }
-        } else {
-            pop()
-        }
+    fun popBackStack(currentNavId: Int,inclusive:Boolean) {
+        navController?.popBackStack(currentNavId, inclusive = inclusive)
     }
 
-    fun navigateToHome(
-        currentNavId: Int,
-        directions: NavDirections,
-        navOptions: NavOptions? = null,
-        navOnResumed: Boolean = true
-    ) {
-        fun executeNavigate() {
-            if (navController != null && currentNavDestination?.id == currentNavId) {
-                navController?.navigate(directions, navOptions)
-                return
-            }
-        }
 
-        if (!navOnResumed) {
-            Log.d("MMMMMMMM", "1: ")
-            executeNavigate()
-        } else {
-            //  try {
-            Log.d("MMMMMMMM", "2: ")
-            navController?.navigate(directions, navOptions)
-            //  } catch (e: Exception) {
-            Log.d("MMMMMMMM", "5: ")
-            val lifeCycleState = fragment().lifecycle.currentState
-            if (lifeCycleState == Lifecycle.State.RESUMED) {
-                Log.d("MMMMMMMM", "3: ")
-//                    executeNavigate()
-            } else {
-                Log.d("MMMMMMMM", "4: ")
-                if (defaultLifecycleObserver != null) {
-                    fragment().lifecycle.removeObserver(defaultLifecycleObserver!!)
-                }
-                defaultLifecycleObserver = object : DefaultLifecycleObserver {
-                    override fun onResume(owner: LifecycleOwner) {
-                        super.onResume(owner)
-                        fragment().lifecycle.removeObserver(this)
-                        executeNavigate()
-                    }
-                }
-
-                fragment().lifecycle.addObserver(defaultLifecycleObserver as DefaultLifecycleObserver)
-            }
-            //  }
-        }
-    }
 }
