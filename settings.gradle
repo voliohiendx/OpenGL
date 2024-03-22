@@ -20,7 +20,7 @@ dependencyResolutionManagement {
         maven { url "https://jitpack.io" }
     }
 }
-rootProject.name = "B1_Project"
+rootProject.name = "OpenGLES"
 include ':app'
 include ':common'
 include ':data'
